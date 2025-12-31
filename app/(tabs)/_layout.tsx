@@ -12,9 +12,9 @@ const TabsLayout = () => {
             tabBarActiveTintColor: colors.primary,
             tabBarInactiveTintColor: colors.textMuted,
             tabBarStyle: {
-                backgroundColor: "#fafafa",
+                backgroundColor: colors.surface,
                 borderTopWidth: 1,
-                borderTopColor: "yellow",
+                borderTopColor: colors.border,
                 height: 90,
                 paddingBottom: 20,
                 paddingTop: 10,
