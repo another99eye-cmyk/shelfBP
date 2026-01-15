@@ -17,8 +17,8 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "convex": "^1.31.2",
-    "expo": "~54.0.30",
-    "expo-constants": "~18.0.12",
+    "expo": "~54.0.31",
+    "expo-constants": "~18.0.13",
     "expo-font": "~14.0.10",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
@@ -44,6 +44,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "expo-module-scripts": "^5.0.8",
     "typescript": "~5.9.2"
   },
   "private": true
