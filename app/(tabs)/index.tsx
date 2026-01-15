@@ -1,19 +1,19 @@
+import useTheme from "@/hooks/useTheme";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Modal,
-  TextInput,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from "@expo/vector-icons";
-import useTheme from "@/hooks/useTheme";
 
 // 1. Define the shape of a Shelf Item
 interface ShelfItem {
@@ -41,10 +41,14 @@ export default function ShelfScreen() {
 
   // 3. Save Items whenever the list changes
   useEffect(() => {
-    if (!loading) {
-      saveItems(items);
-    }
-  }, [items]);
+    const performSave = async () => {
+      // Only save if we aren't in the initial boot-up phase
+      if (!loading) {
+        await AsyncStorage.setItem("shelf-items", JSON.stringify(items));
+      }
+    };
+    performSave();
+  }, [items, loading]); // Added loading to dependencies
 
   const loadItems = async () => {
     try {
@@ -88,7 +92,22 @@ export default function ShelfScreen() {
   const handleDeleteItem = (id: string) => {
     Alert.alert("Delete Item", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => setItems((prev) => prev.filter((i) => i.id !== id)) }
+      { 
+        text: "Delete", 
+        style: "destructive", 
+        onPress: () => {
+          // Use the functional update pattern (prevItems) => ...
+          setItems((prevItems) => {
+            const updatedItems = prevItems.filter((i) => i.id !== id);
+            
+            // Save the filtered list to storage immediately inside the update
+            AsyncStorage.setItem("shelf-items", JSON.stringify(updatedItems))
+              .catch(err => console.error("Storage error:", err));
+              
+            return updatedItems;
+          });
+        } 
+      }
     ]);
   };
 
