@@ -1,150 +1,150 @@
-import useTheme from "@/hooks/useTheme";
-import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from 'react';
 import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
-} from "react-native";
+  TouchableOpacity,
+  FlatList,
+  TextInput,
+  Modal,
+  Alert,
+  SafeAreaView,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import useTheme from '@/hooks/useTheme';
+import { Ionicons } from '@expo/vector-icons';
 
-// 1. Define the shape of a Shelf Item
-interface ShelfItem {
-  id: string;
+type Item = {
+  id: string;           // we'll use timestamp or uuid
   name: string;
   quantity: number;
-}
+};
+
+const STORAGE_KEY = '@shelf_items';
 
 export default function ShelfScreen() {
-  const { colors, isDarkMode } = useTheme();
-  
-  // State
-  const [items, setItems] = useState<ShelfItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  // Modal State (For adding new items)
-  const [modalVisible, setModalVisible] = useState(false);
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemQty, setNewItemQty] = useState("");
+  const { colors } = useTheme();
 
-  // 2. Load Items on Startup
+  const [items, setItems] = useState<Item[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [editItem, setEditItem] = useState<Item | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
+
+  // Load items on mount
   useEffect(() => {
     loadItems();
   }, []);
 
-  // 3. Save Items whenever the list changes
-  useEffect(() => {
-    const performSave = async () => {
-      // Only save if we aren't in the initial boot-up phase
-      if (!loading) {
-        await AsyncStorage.setItem("shelf-items", JSON.stringify(items));
-      }
-    };
-    performSave();
-  }, [items, loading]); // Added loading to dependencies
-
   const loadItems = async () => {
     try {
-      const storedItems = await AsyncStorage.getItem("shelf-items");
-      if (storedItems) {
-        setItems(JSON.parse(storedItems));
+      const json = await AsyncStorage.getItem(STORAGE_KEY);
+      if (json) {
+        setItems(JSON.parse(json));
       }
     } catch (e) {
-      console.error("Failed to load items", e);
-    } finally {
-      setLoading(false);
+      console.error('Failed to load items', e);
     }
   };
 
-  const saveItems = async (currentItems: ShelfItem[]) => {
+  const saveItems = async (updatedItems: Item[]) => {
     try {
-      await AsyncStorage.setItem("shelf-items", JSON.stringify(currentItems));
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedItems));
+      setItems(updatedItems);
     } catch (e) {
-      console.error("Failed to save items", e);
+      console.error('Failed to save items', e);
     }
   };
 
-  const handleAddItem = () => {
+  const addItem = () => {
     if (!newItemName.trim()) {
-      Alert.alert("Error", "Please enter an item name");
+      Alert.alert('Error', 'Please enter item name');
       return;
     }
 
-    const newItem: ShelfItem = {
-      id: Date.now().toString(), // Simple ID generation
-      name: newItemName,
-      quantity: parseInt(newItemQty) || 0,
+    const newItem: Item = {
+      id: Date.now().toString(),
+      name: newItemName.trim(),
+      quantity: 1,
     };
 
-    setItems((prev) => [newItem, ...prev]);
-    setNewItemName("");
-    setNewItemQty("");
+    const updated = [...items, newItem];
+    saveItems(updated);
+    setNewItemName('');
     setModalVisible(false);
   };
 
-  const handleDeleteItem = (id: string) => {
-    Alert.alert("Delete Item", "Are you sure?", [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Delete", 
-        style: "destructive", 
+  const openEditModal = (item: Item) => {
+    setEditItem(item);
+    setEditQuantity(item.quantity.toString());
+    setModalVisible(true);
+  };
+
+  const saveEdit = () => {
+    if (!editItem) return;
+    const qty = parseInt(editQuantity, 10);
+    if (isNaN(qty) || qty < 0) {
+      Alert.alert('Error', 'Please enter a valid number ≥ 0');
+      return;
+    }
+
+    const updated = items.map((it) =>
+      it.id === editItem.id ? { ...it, quantity: qty } : it
+    );
+
+    saveItems(updated);
+    setEditItem(null);
+    setModalVisible(false);
+  };
+
+  const deleteItem = (id: string) => {
+    Alert.alert('Delete Item', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
         onPress: () => {
-          // Use the functional update pattern (prevItems) => ...
-          setItems((prevItems) => {
-            const updatedItems = prevItems.filter((i) => i.id !== id);
-            
-            // Save the filtered list to storage immediately inside the update
-            AsyncStorage.setItem("shelf-items", JSON.stringify(updatedItems))
-              .catch(err => console.error("Storage error:", err));
-              
-            return updatedItems;
-          });
-        } 
-      }
+          const updated = items.filter((it) => it.id !== id);
+          saveItems(updated);
+        },
+      },
     ]);
   };
 
-  const handleUpdateQuantity = (id: string, newQty: string) => {
-    const qty = parseInt(newQty);
-    if (isNaN(qty)) return;
+  const renderItem = ({ item }: { item: Item }) => (
+    <View style={[styles.itemRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.itemInfo}>
+        <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
+        <Text style={[styles.quantity, { color: colors.textMuted }]}>
+          Qty: {item.quantity}
+        </Text>
+      </View>
 
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: qty } : item))
-    );
-  };
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.editBtn, { backgroundColor: colors.primary + '30' }]}
+          onPress={() => openEditModal(item)}
+        >
+          <Ionicons name="pencil" size={20} color={colors.primary} />
+        </TouchableOpacity>
 
-  const incrementQty = (id: string, amount: number) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: Math.max(0, item.quantity + amount) } : item))
-    );
-  };
-
-  // 4. Render Individual Item Component
-  const renderItem = ({ item }: { item: ShelfItem }) => {
-    return (
-      <ExpandableListItem 
-        item={item} 
-        colors={colors} 
-        onDelete={() => handleDeleteItem(item.id)}
-        onUpdateQty={(val: string) => handleUpdateQuantity(item.id, val)}
-        onIncrement={(amount: number) => incrementQty(item.id, amount)}
-      />
-    );
-  };
+        <TouchableOpacity
+          style={[styles.deleteBtn, { backgroundColor: colors.danger + '20' }]}
+          onPress={() => deleteItem(item.id)}
+        >
+          <Ionicons name="trash-outline" size={20} color={colors.danger} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* HEADER / ADD BUTTON */}
-      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>My Shop Storage</Text>
-        <TouchableOpacity 
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Header / Add Button */}
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }]}>Shelf</Text>
+
+        <TouchableOpacity
           style={[styles.addButton, { backgroundColor: colors.primary }]}
           onPress={() => setModalVisible(true)}
         >
@@ -153,258 +153,197 @@ export default function ShelfScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* LIST OF ITEMS */}
       <FlatList
         data={items}
-        keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: 16 }}
+        keyExtractor={(item) => item.id}
         ListEmptyComponent={
-          <Text style={{ textAlign: "center", marginTop: 50, color: colors.textMuted }}>
-            No items in shelf. Add one!
+          <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+            No items yet. Add some!
           </Text>
         }
+        contentContainerStyle={styles.listContent}
       />
 
-      {/* ADD ITEM MODAL */}
+      {/* Modal for Add / Edit */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Add New Item</Text>
-            
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {editItem ? 'Edit Quantity' : 'New Item'}
+            </Text>
+
+            {!editItem && (
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.backgrounds.input, color: colors.text, borderColor: colors.border }]}
+                placeholder="Item name (e.g. Rice, Soap)"
+                placeholderTextColor={colors.textMuted}
+                value={newItemName}
+                onChangeText={setNewItemName}
+                autoFocus
+              />
+            )}
+
             <TextInput
               style={[styles.input, { backgroundColor: colors.backgrounds.input, color: colors.text, borderColor: colors.border }]}
-              placeholder="Item Name (e.g. Milk)"
+              placeholder="Quantity"
               placeholderTextColor={colors.textMuted}
-              value={newItemName}
-              onChangeText={setNewItemName}
-            />
-            
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.backgrounds.input, color: colors.text, borderColor: colors.border }]}
-              placeholder="Initial Quantity (e.g. 10)"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="numeric"
-              value={newItemQty}
-              onChangeText={setNewItemQty}
+              value={editQuantity}
+              onChangeText={setEditQuantity}
+              keyboardType="number-pad"
+              autoFocus={!!editItem}
             />
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={{ padding: 10 }}>
-                <Text style={{ color: colors.danger }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={handleAddItem} 
-                style={[styles.modalSaveButton, { backgroundColor: colors.primary }]}
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  setModalVisible(false);
+                  setEditItem(null);
+                  setNewItemName('');
+                }}
               >
-                <Text style={{ color: "white", fontWeight: "bold" }}>Save Item</Text>
+                <Text style={{ color: colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+                onPress={editItem ? saveEdit : addItem}
+              >
+                <Text style={{ color: 'white', fontWeight: '600' }}>
+                  {editItem ? 'Save' : 'Add'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
-
-// Sub-component for the "Dropdown" / Expandable functionality
-const ExpandableListItem = ({ item, colors, onDelete, onUpdateQty, onIncrement }: any) => {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow }]}>
-      
-      {/* Top Row: Visible always */}
-      <TouchableOpacity 
-        style={styles.cardHeader} 
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
-      >
-        <View>
-          <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12 }}>ID: {item.id.slice(-4)}</Text>
-        </View>
-        
-        <View style={styles.cardHeaderRight}>
-          <Text style={[styles.itemQty, { color: colors.primary }]}>x{item.quantity}</Text>
-          <Ionicons 
-            name={expanded ? "chevron-up" : "chevron-down"} 
-            size={20} 
-            color={colors.textMuted} 
-          />
-        </View>
-      </TouchableOpacity>
-
-      {/* Expanded Row: The "Dropdown" to edit */}
-      {expanded && (
-        <View style={[styles.cardBody, { borderTopColor: colors.border }]}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>Edit Amount:</Text>
-          
-          <View style={styles.editControls}>
-            <TouchableOpacity onPress={() => onIncrement(-1)} style={[styles.qtyBtn, { backgroundColor: colors.gradients.empty[1] }]}>
-              <Ionicons name="remove" size={20} color={colors.text} />
-            </TouchableOpacity>
-
-            <TextInput 
-              style={[styles.qtyInput, { color: colors.text, borderColor: colors.border }]}
-              keyboardType="numeric"
-              value={String(item.quantity)}
-              onChangeText={onUpdateQty}
-            />
-
-            <TouchableOpacity onPress={() => onIncrement(1)} style={[styles.qtyBtn, { backgroundColor: colors.gradients.empty[1] }]}>
-              <Ionicons name="add" size={20} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity onPress={onDelete} style={styles.deleteBtn}>
-            <Ionicons name="trash-outline" size={18} color={colors.danger} />
-            <Text style={{ color: colors.danger, marginLeft: 5 }}>Remove Item</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   header: {
-    paddingTop: 60, // for status bar
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  headerTitle: {
+  title: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: '700',
   },
   addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
   },
   addButtonText: {
-    color: "white",
-    fontWeight: "600",
-    marginLeft: 4,
+    color: 'white',
+    fontWeight: '600',
   },
-  // Card Styles
-  card: {
+  listContent: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 3,
   },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-  },
-  cardHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  itemInfo: {
+    flex: 1,
   },
   itemName: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: '600',
   },
-  itemQty: {
-    fontSize: 18,
-    fontWeight: "bold",
+  quantity: {
+    fontSize: 14,
+    marginTop: 4,
   },
-  // Expanded Body
-  cardBody: {
-    padding: 16,
-    borderTopWidth: 1,
-    backgroundColor: "rgba(0,0,0,0.02)", // slight dim
+  actions: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  editControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 20,
-    gap: 15,
-  },
-  qtyBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyInput: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 20,
-    borderBottomWidth: 2,
-    padding: 5,
+  editBtn: {
+    padding: 10,
+    borderRadius: 8,
   },
   deleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-end",
+    padding: 10,
+    borderRadius: 8,
   },
-  label: {
-    fontSize: 12,
-    textTransform: "uppercase",
-    fontWeight: "bold",
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 60,
+    fontSize: 16,
   },
-  // Modal Styles
+  // Modal
   modalOverlay: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   modalContent: {
-    width: "85%",
-    padding: 24,
+    width: '100%',
+    maxWidth: 400,
     borderRadius: 16,
-    borderWidth: 1,
+    padding: 24,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 16,
-    textAlign: "center",
+    fontWeight: '700',
+    marginBottom: 20,
+    textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: 12,
+    padding: 14,
     fontSize: 16,
+    marginBottom: 16,
   },
   modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    gap: 12,
   },
-  modalSaveButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  }
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
 });
